@@ -1,5 +1,5 @@
 // offline support: everything the app needs is cached on first visit
-const CACHE = 'touxietai-b9ee28618d';
+const CACHE = 'touxietai-79d021db41';
 const FILES = ["./", "index.html", "manifest.webmanifest", "manifest-zh.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

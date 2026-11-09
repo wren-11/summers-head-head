@@ -35,8 +35,9 @@
   color-scheme: dark;
 }
 [hidden] { display: none !important; }
-html, body { height: 100%; }
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 body {
+  position: fixed; inset: 0;   /* iPad Safari: the page itself never scrolls, bounces or swipes */
   margin: 0; background: var(--desk); color: var(--ink); font-family: var(--font); font-size: 14px;
   overflow: hidden; overscroll-behavior: none;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
@@ -58,6 +59,7 @@ button { font: inherit; color: inherit; }
 }
 .card { position: relative; }
 .card .lang { position: absolute; top: 14px; right: 14px; height: 32px; font-size: 13px; background: var(--hover); }
+.card .byline .ver { margin-left: 6px; font-size: 11px; opacity: .6; letter-spacing: 0; }
 .card .byline { margin: -12px 0 0; color: var(--muted); font-size: 14px; letter-spacing: .02em; }
 .card h1 { margin: 0; padding-right: 76px; font-size: 28px; letter-spacing: .04em; text-wrap: balance; }
 .card p { margin: 0; color: var(--muted); line-height: 1.6; }
@@ -86,11 +88,23 @@ button { font: inherit; color: inherit; }
 }
 #viewport.pan { cursor: grab; }
 #viewport.panning { cursor: grabbing; }
-#stage {
-  position: absolute; left: 0; top: 0; transform-origin: 0 0; background: var(--paper);
-  box-shadow: 0 2px 18px rgba(0, 0, 0, .18);
+#stage, #ink { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; }
+#stage { background: var(--paper); box-shadow: 0 2px 18px rgba(0, 0, 0, .18); }
+#stage img, #ink canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+#guide { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* ---------- minimap ---------- */
+#mini {
+  position: fixed; z-index: 6; left: calc(14px + env(safe-area-inset-left, 0px)); top: calc(14px + env(safe-area-inset-top, 0px));
+  background: var(--panel); border-radius: 12px; box-shadow: var(--shadow); padding: 6px; display: grid; gap: 4px;
 }
-#stage img, #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+#miniCv { display: block; touch-action: none; cursor: pointer; border-radius: 6px; background: var(--hover); }
+#mini .mini-row { display: flex; justify-content: space-between; align-items: center; gap: 4px; }
+#mini .btn { height: 26px; min-width: 26px; padding: 0 6px; font-size: 12px; }
+#mini .btn svg { width: 16px; height: 16px; }
+#mini.closed { padding: 0; }
+#mini.closed #miniCv, #mini.closed .mini-row > :not(#miniToggle) { display: none; }
+#mini.closed #miniToggle { height: 38px; min-width: 38px; }
 #ref { opacity: .4; }
 
 /* ---------- toolbar ---------- */
@@ -201,14 +215,14 @@ button { font: inherit; color: inherit; }
   <div class="card">
     <button class="btn lang" id="langStart" type="button" data-i18n="langOther">English</button>
     <h1 data-i18n="appName">Summer的人头子</h1>
-    <p class="byline">by Summer头子</p>
+    <p class="byline">by Summer头子 <span class="ver">v2026.11.07-1</span></p>
     <p data-i18n="intro">选一张参考图垫在下面，调好透明度，直接在上面描。用来练结构和比例，比如 Loomis 头部分析。</p>
     <button class="pick" id="pickBtn" type="button" data-i18n="pick">选择图片</button>
     <p style="font-size:13px" data-i18n="dropHint">也可以把图片拖进这个窗口，或直接粘贴（⌘V / Ctrl+V）。</p>
     <div class="keys">
       <span><kbd>⌘ +</kbd> <kbd>⌘ −</kbd></span><span data-i18n="kZoom">放大 / 缩小（<kbd>⌘ 0</kbd> 适应屏幕）</span>
       <span data-i18n="kHoldL">画完停住</span><span data-i18n="kHold">不抬笔停半秒：圈变成圆/椭圆，线变直；继续移动笔可以缩放、旋转</span>
-      <span data-i18n="kPinchL">双指</span><span data-i18n="kPinch">平板上捏合缩放、转动画布、拖动画面（<kbd>R</kbd> 摆正）</span>
+      <span data-i18n="kPinchL">双指</span><span data-i18n="kPinch">平板上捏合缩放、转动画布、拖动画面（<kbd>R</kbd> 摆正，<kbd>M</kbd> 镜像）</span>
       <span data-i18n="kSpaceL"><kbd>空格</kbd> + 拖</span><span data-i18n="kSpace">移动画面</span>
       <span><kbd>B</kbd> <kbd>E</kbd></span><span data-i18n="kTools">铅笔 / 橡皮</span>
       <span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></span><span data-i18n="kColors">黑 / 蓝 / 红</span>
@@ -221,9 +235,21 @@ button { font: inherit; color: inherit; }
   <div id="viewport">
     <div id="stage">
       <img id="ref" alt="参考图" data-i18n-alt="aRef" draggable="false">
-      <canvas id="guide"></canvas>
+    </div>
+    <canvas id="guide"></canvas>
+    <div id="ink">
       <canvas id="draw"></canvas>
       <canvas id="live"></canvas>
+    </div>
+  </div>
+
+  <div id="mini">
+    <canvas id="miniCv" aria-label="缩略图：点哪里就看哪里" data-i18n-aria="tMini" title="缩略图：点或拖动，跳到那里" data-i18n-title="tMini"></canvas>
+    <div class="mini-row">
+      <button class="btn" id="miniFit" type="button" title="看全图 (⌘0)" data-i18n-title="tFit" data-i18n="lWhole">全图</button>
+      <button class="btn" id="miniToggle" type="button" title="收起 / 打开缩略图" data-i18n-title="tMiniToggle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="11" y="11" width="7" height="7" rx="1"/></svg>
+      </button>
     </div>
   </div>
 
@@ -250,8 +276,8 @@ button { font: inherit; color: inherit; }
     <span class="sep"></span>
     <div class="group" id="colors">
       <button class="btn swatch" type="button" data-color="#1a1a1a" aria-pressed="true" title="黑 (1)" data-i18n-title="tBlack"><i style="background:#1a1a1a"></i></button>
-      <button class="btn swatch" type="button" data-color="#1f5fd6" aria-pressed="false" title="蓝 (2)" data-i18n-title="tBlue"><i style="background:#1f5fd6"></i></button>
-      <button class="btn swatch" type="button" data-color="#d93a2b" aria-pressed="false" title="红 (3)" data-i18n-title="tRed"><i style="background:#d93a2b"></i></button>
+      <button class="btn swatch" type="button" data-color="#1a4fc4" aria-pressed="false" title="蓝 (2)" data-i18n-title="tBlue"><i style="background:#1a4fc4"></i></button>
+      <button class="btn swatch" type="button" data-color="#cf2b1f" aria-pressed="false" title="红 (3)" data-i18n-title="tRed"><i style="background:#cf2b1f"></i></button>
     </div>
     <span class="sep"></span>
     <div class="group">
@@ -288,6 +314,9 @@ button { font: inherit; color: inherit; }
       </button>
       <button class="btn" id="rotBtn" type="button" hidden title="摆正画布 (R)" data-i18n-title="tRot">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg><span id="rotLabel">0°</span>
+      </button>
+      <button class="btn" id="flipBtn" type="button" aria-pressed="false" title="左右镜像（只翻转显示，保存的图不变）(M)" data-i18n-title="tFlip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M9 7 3 17h6Z"/><path d="M15 7l6 10h-6Z" stroke-dasharray="2.5 2.5"/></svg>
       </button>
     </div>
     <span class="sep"></span>
@@ -360,14 +389,14 @@ button { font: inherit; color: inherit; }
       pick: '选择图片', dropHint: '也可以把图片拖进这个窗口，或直接粘贴（⌘V / Ctrl+V）。',
       kZoom: '放大 / 缩小（<kbd>⌘ 0</kbd> 适应屏幕）', kHoldL: '画完停住',
       kHold: '不抬笔停半秒：圈变成圆/椭圆，线变直；继续移动笔可以缩放、旋转',
-      kPinchL: '双指', kPinch: '平板上捏合缩放、转动画布、拖动画面（<kbd>R</kbd> 摆正）', kSpaceL: '<kbd>空格</kbd> + 拖', kSpace: '移动画面',
+      kPinchL: '双指', kPinch: '平板上捏合缩放、转动画布、拖动画面（<kbd>R</kbd> 摆正，<kbd>M</kbd> 镜像）', kSpaceL: '<kbd>空格</kbd> + 拖', kSpace: '移动画面',
       kTools: '铅笔 / 橡皮', kColors: '黑 / 蓝 / 红', kUndo: '撤销（<kbd>⌘ ⇧ Z</kbd> 重做）',
       aRef: '参考图', aTools: '工具', tChange: '换一张图（当前线稿会清空）', lChange: '换图', tPen: '铅笔 (B)',
       tSnap: '形状校正：画完停住不抬笔，圈变成圆或椭圆、线变直；继续不抬笔移动可以调整 (Q)', lSnap: '校正',
       tEraser: '橡皮 (E)', tBlack: '黑 (1)', tBlue: '蓝 (2)', tRed: '红 (3)',
       tSize: '笔刷粗细（[ 和 ] 调整）', lSize: '粗细', tOpacity: '参考图透明度', lOpacity: '原图',
       tEye: '隐藏 / 显示原图 (H)', tUndo: '撤销 (⌘Z)', tRedo: '重做 (⌘⇧Z)', tClear: '清空线稿（可撤销）',
-      tZoomOut: '缩小 (⌘−)', tFit: '适应屏幕 (⌘0)', tRot: '摆正画布 (R)', tZoomIn: '放大 (⌘+)', tLoomis: 'Loomis 头部参考 (L)',
+      tZoomOut: '缩小 (⌘−)', tFit: '适应屏幕 (⌘0)', tRot: '摆正画布 (R)', tMini: '缩略图：点或拖动，跳到那里', tMiniToggle: '收起 / 打开缩略图', tFlip: '左右镜像（只翻转显示，保存的图不变）(M)', flipOn: '已镜像：用来检查画歪没有，保存的图不受影响', flipOff: '已恢复正常方向', lWhole: '全图', tZoomIn: '放大 (⌘+)', tLoomis: 'Loomis 头部参考 (L)',
       tSave: '保存 (⌘S)', lSave: '保存', loomisTitle: 'Loomis 头部', tClose: '收起', aTurn: '拖动旋转头部',
       pFront: '正面', p34: '四分之三', pSide: '侧面', pUp: '仰视', pDown: '俯视', lRoll: '歪头', lMarks: '标出眼睛、鼻尖、下巴、耳朵', mEye: '眼睛', mNose: '鼻尖', mChin: '下巴', mEar: '耳朵', lGSize: '大小',
       tGrip: '拖进画面，或点一下放到画面中间', gripPlace: '拖到画面上', gripAgain: '重新放置', lMove: '移动', lRemove: '移除',
@@ -392,14 +421,14 @@ button { font: inherit; color: inherit; }
       pick: 'Choose a picture', dropHint: 'You can also drag a picture into this window or paste one (⌘V / Ctrl+V).',
       kZoom: 'Zoom in / out (<kbd>⌘ 0</kbd> fits the screen)', kHoldL: 'Pause at the end',
       kHold: 'Keep the pen down for half a second: a loop becomes a circle or ellipse, a line goes straight. Keep moving to resize and rotate.',
-      kPinchL: 'Two fingers', kPinch: 'Pinch to zoom, twist to rotate, drag to move on a tablet (<kbd>R</kbd> straightens)', kSpaceL: '<kbd>Space</kbd> + drag', kSpace: 'Move the page',
+      kPinchL: 'Two fingers', kPinch: 'Pinch to zoom, twist to rotate, drag to move on a tablet (<kbd>R</kbd> straightens, <kbd>M</kbd> mirrors)', kSpaceL: '<kbd>Space</kbd> + drag', kSpace: 'Move the page',
       kTools: 'Pencil / eraser', kColors: 'Black / blue / red', kUndo: 'Undo (<kbd>⌘ ⇧ Z</kbd> redo)',
       aRef: 'Reference picture', aTools: 'Tools', tChange: 'Choose another picture (clears the drawing)', lChange: 'New picture', tPen: 'Pencil (B)',
       tSnap: 'Shape correction: pause with the pen down to turn a loop into a circle or ellipse and a line into a straight line; keep moving to adjust (Q)', lSnap: 'Shapes',
       tEraser: 'Eraser (E)', tBlack: 'Black (1)', tBlue: 'Blue (2)', tRed: 'Red (3)',
       tSize: 'Brush size ([ and ])', lSize: 'Size', tOpacity: 'Reference opacity', lOpacity: 'Ref',
       tEye: 'Hide / show the reference (H)', tUndo: 'Undo (⌘Z)', tRedo: 'Redo (⌘⇧Z)', tClear: 'Clear the drawing (can be undone)',
-      tZoomOut: 'Zoom out (⌘−)', tFit: 'Fit to screen (⌘0)', tRot: 'Straighten the page (R)', tZoomIn: 'Zoom in (⌘+)', tLoomis: 'Loomis head reference (L)',
+      tZoomOut: 'Zoom out (⌘−)', tFit: 'Fit to screen (⌘0)', tRot: 'Straighten the page (R)', tMini: 'Overview: tap or drag to jump there', tMiniToggle: 'Hide / show the overview', tFlip: 'Mirror left–right (view only, the saved picture is unchanged) (M)', flipOn: 'Mirrored: a quick check for lopsided drawing. Saving is not affected', flipOff: 'Back to normal', lWhole: 'Whole', tZoomIn: 'Zoom in (⌘+)', tLoomis: 'Loomis head reference (L)',
       tSave: 'Save (⌘S)', lSave: 'Save', loomisTitle: 'Loomis head', tClose: 'Close', aTurn: 'Drag to turn the head',
       pFront: 'Front', p34: '3/4', pSide: 'Side', pUp: 'From below', pDown: 'From above', lRoll: 'Tilt', lMarks: 'Mark the eyes, nose, chin and ears', mEye: 'Eye', mNose: 'Nose', mChin: 'Chin', mEar: 'Ear', lGSize: 'Size',
       tGrip: 'Drag it onto the page, or tap to place it in the middle', gripPlace: 'Drag onto page', gripAgain: 'Place again', lMove: 'Move', lRemove: 'Remove',
@@ -441,13 +470,16 @@ button { font: inherit; color: inherit; }
     applyLang(); refresh();
   }
   const fileInput = $('#file'), start = $('#start'), app = $('#app');
-  const vp = $('#viewport'), stage = $('#stage'), refImg = $('#ref'), cv = $('#draw');
+  const vp = $('#viewport'), stage = $('#stage'), ink = $('#ink'), refImg = $('#ref'), cv = $('#draw');
   const ctx = cv.getContext('2d');
 
-  const MAX_SIDE = 3000;
+  // every layer, undo snapshot and the reference image are this big; tablets get less,
+  // because Safari on iPad stalls once canvas memory runs short
+  const TABLET = navigator.maxTouchPoints > 1;
+  const MAX_SIDE = TABLET ? 2048 : 3000;
   const st = {
     tool: 'pen', snap: true, sizes: { pen: 3, eraser: 5 }, color: '#1a1a1a', size: 3, opacity: 40, refHidden: false,
-    scale: 1, rot: 0, tx: 0, ty: 0, w: 0, h: 0, name: 'tracing', penSeen: false, loaded: false,
+    scale: 1, rot: 0, flip: 1, tx: 0, ty: 0, w: 0, h: 0, name: 'tracing', penSeen: false, loaded: false,
   };
   let strokes = [], redoStack = [];
 
@@ -469,14 +501,15 @@ button { font: inherit; color: inherit; }
       if (refImg.src.startsWith('blob:')) URL.revokeObjectURL(refImg.src);
       refImg.src = url;
       cv.width = live.width = paint.width = st.w; cv.height = live.height = paint.height = st.h;
-      stage.style.width = st.w + 'px'; stage.style.height = st.h + 'px';
-      strokes = []; redoStack = []; checkpoints.clear(); updateHistoryBtns();
-      guideCv.width = st.w; guideCv.height = st.h; removeGuide();
+      stage.style.width = ink.style.width = st.w + 'px'; stage.style.height = ink.style.height = st.h + 'px';
+      strokes = []; redoStack = []; clearCheckpoints(); updateHistoryBtns();
+      st.flip = 1; $('#flipBtn').setAttribute('aria-pressed', false);
+      removeGuide(); sizeMini();
       const base = Math.max(2, Math.round(Math.max(st.w, st.h) / 500));
       st.sizes = { pen: base, eraser: Math.round(base * 1.5) };
       setSize(st.sizes[st.tool]);
       start.hidden = true; app.hidden = false; st.loaded = true;
-      fit();
+      sizeGuide(); fit(); paintThumb();
     };
     img.onerror = () => { URL.revokeObjectURL(url); toast(t('badImage')); };
     img.src = url;
@@ -502,7 +535,8 @@ button { font: inherit; color: inherit; }
 
   // ---------- view transform ----------
   const applyView = () => {
-    stage.style.transform = `translate(${st.tx}px, ${st.ty}px) rotate(${st.rot}rad) scale(${st.scale})`;
+    stage.style.transform = ink.style.transform = `translate(${st.tx}px, ${st.ty}px) rotate(${st.rot}rad) scale(${st.scale * st.flip}, ${st.scale})`;
+    if (typeof viewChanged === 'function') viewChanged();
     $('#zoomLabel').textContent = Math.round(st.scale * 100) + '%';
     const deg = Math.round(st.rot * 180 / Math.PI);
     $('#rotBtn').hidden = !st.rot; $('#rotLabel').textContent = deg + '°';
@@ -520,12 +554,13 @@ button { font: inherit; color: inherit; }
   // viewport point -> sheet point, and placing a sheet point at a viewport point
   function toSheet(vx, vy) {
     const dx = vx - st.tx, dy = vy - st.ty, c = Math.cos(st.rot), s = Math.sin(st.rot);
-    return { x: (c * dx + s * dy) / st.scale, y: (c * dy - s * dx) / st.scale };
+    return { x: (c * dx + s * dy) / (st.scale * st.flip), y: (c * dy - s * dx) / st.scale };
   }
   function pinTo(sp, vx, vy) {
     const c = Math.cos(st.rot), s = Math.sin(st.rot);
-    st.tx = vx - st.scale * (c * sp.x - s * sp.y);
-    st.ty = vy - st.scale * (s * sp.x + c * sp.y);
+    const fx = sp.x * st.flip;
+    st.tx = vx - st.scale * (c * fx - s * sp.y);
+    st.ty = vy - st.scale * (s * fx + c * sp.y);
   }
   function zoomAt(cx, cy, factor) {
     const sp = toSheet(cx, cy);
@@ -546,9 +581,17 @@ button { font: inherit; color: inherit; }
   $('#zoomInBtn').onclick = () => zoomCenter(1.25);
   $('#zoomOutBtn').onclick = () => zoomCenter(0.8);
   $('#zoomLabel').onclick = fit;
+  // mirror: only how it looks on screen; the lines and the saved picture stay the right way round
+  function mirror() {
+    const r = vp.getBoundingClientRect(), sp = toSheet(r.width / 2, r.height / 2);
+    st.flip = -st.flip; st.rot = -st.rot; pinTo(sp, r.width / 2, r.height / 2); applyView();
+    $('#flipBtn').setAttribute('aria-pressed', st.flip < 0);
+    toast(t(st.flip < 0 ? 'flipOn' : 'flipOff'));
+  }
+  $('#flipBtn').onclick = mirror;
   const straighten = () => { const r = vp.getBoundingClientRect(); rotateAt(r.width / 2, r.height / 2, 0); };
   $('#rotBtn').onclick = straighten;
-  window.addEventListener('resize', () => { if (st.loaded) fit(); });
+  window.addEventListener('resize', () => { if (st.loaded) { sizeGuide(); sizeMini(); fit(); paintThumb(); } });
 
   // trackpad pinch (Chrome/Firefox send ctrl+wheel) and two-finger scroll
   vp.addEventListener('wheel', e => {
@@ -570,7 +613,7 @@ button { font: inherit; color: inherit; }
   document.addEventListener('gestureend', e => e.preventDefault());
 
   // ---------- drawing ----------
-  const COLORS = ['#1a1a1a', '#1f5fd6', '#d93a2b'];
+  const COLORS = ['#1a1a1a', '#1a4fc4', '#cf2b1f'];
 
   // ---- pencil, rebuilt from the settings of the CSP brush "アナログ風鉛筆改":
   // 3 grainy tips picked at random with random rotation, stamps ~30% of the tip apart,
@@ -624,7 +667,7 @@ button { font: inherit; color: inherit; }
   // the stroke being drawn is stamped onto a hidden layer; the visible #live layer is that
   // layer with the paper grain cut out, refreshed only where new stamps landed.
   // When the stroke ends it is merged down onto the drawing.
-  const GRAIN_STRENGTH = 0.75;
+  const GRAIN_STRENGTH = 0.6;
   const grainPattern = ctx.createPattern(grainHoles, 'repeat');
   const live = $('#live'), lctx = live.getContext('2d');
   const paint = document.createElement('canvas'), pctx = paint.getContext('2d');
@@ -669,7 +712,7 @@ button { font: inherit; color: inherit; }
     const d = Math.max(1, s.size * (0.4 + 0.8 * p) * taper);
     const tip = tipsIn(s.color)[Math.floor(s._rng() * 3)], rot = s._rng() * Math.PI * 2;
     const cos = Math.cos(rot), sin = Math.sin(rot);
-    pctx.globalAlpha = 0.3 + 0.55 * p;
+    pctx.globalAlpha = Math.min(1, 0.45 + 0.55 * p);
     pctx.setTransform(cos, sin, -sin, cos, x, y);
     pctx.drawImage(tip, -d / 2, -d / 2, d, d);
     const r = d / 2 + 2;
@@ -734,19 +777,35 @@ button { font: inherit; color: inherit; }
     c.lineWidth = widthAt(s, p[n - 1].p);
     c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(p[n - 1].x, p[n - 1].y); c.stroke();
   }
-  // snapshots every 15 strokes, so undo only replays the last few strokes
-  const checkpoints = new Map();
+  // snapshots every 15 strokes, so undo only replays the last few strokes.
+  // At most 3 full-size snapshots live at once and their canvases are recycled:
+  // Safari on iPad frees canvas memory late, and runs out of it after a while of drawing.
+  const EVERY = 15, KEEP = 3;
+  const checkpoints = new Map(), spare = [];
+  function dropCheckpoint(k) {
+    const c = checkpoints.get(k);
+    checkpoints.delete(k);
+    if (spare.length < 1 && c.width === cv.width && c.height === cv.height) spare.push(c);
+    else c.width = c.height = 0;   // hands the memory back right away
+  }
+  function clearCheckpoints() { for (const k of [...checkpoints.keys()]) dropCheckpoint(k); spare.forEach(c => { c.width = c.height = 0; }); spare.length = 0; }
+  function snapshot(n) {
+    // keep the snapshots nearest to where the drawing is now
+    while (checkpoints.size >= KEEP) {
+      const far = [...checkpoints.keys()].sort((a, b) => Math.abs(b - n) - Math.abs(a - n))[0];
+      dropCheckpoint(far);
+    }
+    const c = spare.pop() || document.createElement('canvas');
+    if (c.width !== cv.width || c.height !== cv.height) { c.width = cv.width; c.height = cv.height; }
+    const g = c.getContext('2d');
+    g.globalCompositeOperation = 'copy'; g.drawImage(cv, 0, 0); g.globalCompositeOperation = 'source-over';
+    checkpoints.set(n, c);
+  }
   function commit(entry, fromRedo) {
-    if (!fromRedo) for (const k of [...checkpoints.keys()]) if (k > strokes.length) checkpoints.delete(k);
+    if (!fromRedo) for (const k of [...checkpoints.keys()]) if (k > strokes.length) dropCheckpoint(k);
     strokes.push(entry);
     const n = strokes.length;
-    if (n % 15 === 0 && !checkpoints.has(n)) {
-      const snap = document.createElement('canvas'); snap.width = cv.width; snap.height = cv.height;
-      snap.getContext('2d').drawImage(cv, 0, 0);
-      checkpoints.set(n, snap);
-      const keys = [...checkpoints.keys()].sort((a, b) => a - b);
-      while (keys.length > 3) checkpoints.delete(keys.shift());
-    }
+    if (n % EVERY === 0 && !checkpoints.has(n)) snapshot(n);
   }
   function redrawAll() {
     ctx.globalCompositeOperation = 'source-over';
@@ -756,15 +815,20 @@ button { font: inherit; color: inherit; }
     let best = 0;
     for (const k of checkpoints.keys()) if (k <= strokes.length && k > best) best = k;
     if (best > from) { ctx.drawImage(checkpoints.get(best), 0, 0); from = best; }
+    // replaying a long way back (several undos in a row): leave a snapshot near the end,
+    // so the next undo is quick again
+    const mark = Math.floor(strokes.length / EVERY) * EVERY;
     for (let i = from; i < strokes.length; i++) {
       const s = strokes[i];
       if (s.tool === 'pen') resetPencil(s);
       for (let j = 1; j < s.pts.length; j++) drawSegment(ctx, s, j);
       drawTail(ctx, s);
+      if (i + 1 === mark && mark - from > EVERY && !checkpoints.has(mark)) { ctx.globalCompositeOperation = 'source-over'; snapshot(mark); }
     }
     ctx.globalCompositeOperation = 'source-over';
   }
   function updateHistoryBtns() {
+    if (typeof thumbLater === 'function') thumbLater();
     $('#undoBtn').disabled = !strokes.length;
     $('#redoBtn').disabled = !redoStack.length;
   }
@@ -773,7 +837,7 @@ button { font: inherit; color: inherit; }
     const s = strokes[strokes.length - 1];
     if (s.raw) {   // first undo of a corrected shape brings back the hand-drawn line
       s.pts = s.raw; delete s.raw; s.pen = s.wasPen;
-      for (const k of [...checkpoints.keys()]) if (k >= strokes.length) checkpoints.delete(k);
+      for (const k of [...checkpoints.keys()]) if (k >= strokes.length) dropCheckpoint(k);
     } else redoStack.push(strokes.pop());
     redrawAll(); updateHistoryBtns();
   }
@@ -802,8 +866,7 @@ button { font: inherit; color: inherit; }
   let stroke = null, strokePointer = null, strokeIsTouch = false;
   let pan = null, pinch = null, spaceDown = false;
 
-  function toCanvas(e) {
-    const r = vp.getBoundingClientRect();
+  function toCanvas(e, r = vp.getBoundingClientRect()) {
     let p = e.pointerType === 'pen' ? e.pressure : 0.5;
     if (e.pointerType === 'pen' && p === 0) p = 0.15;
     const sp = toSheet(e.clientX - r.left, e.clientY - r.top);
@@ -827,12 +890,22 @@ button { font: inherit; color: inherit; }
     stroke.pts.push(pt);
     drawSegment(ctx, stroke, stroke.pts.length - 1);
   }
+  // pen events are queued and drawn once per frame: Apple Pencil reports up to 240 a second
+  let queued = [], frame = 0;
   function extendStroke(e) {
-    if (shapeEdit) { armHold(e.clientX, e.clientY); adjustShape(toCanvas(e)); return; }
     armHold(e.clientX, e.clientY);
     const evs = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
-    for (const ev of (evs.length ? evs : [e])) {
-      const raw = toCanvas(ev), last = stroke.pts[stroke.pts.length - 1], k = 0.55;
+    const r = vp.getBoundingClientRect();
+    for (const ev of (evs.length ? evs : [e])) queued.push(toCanvas(ev, r));
+    if (!frame) frame = requestAnimationFrame(flushStroke);
+  }
+  function flushStroke() {
+    frame = 0;
+    const pts = queued; queued = [];
+    if (!stroke || !pts.length) return;
+    if (shapeEdit) { adjustShape(pts[pts.length - 1]); return; }
+    for (const raw of pts) {
+      const last = stroke.pts[stroke.pts.length - 1], k = 0.55;
       lastRaw = raw;
       addPoint({ x: last.x + (raw.x - last.x) * k, y: last.y + (raw.y - last.y) * k, p: raw.p });
     }
@@ -956,6 +1029,7 @@ button { font: inherit; color: inherit; }
   function trySnap() {
     holdTimer = null;
     if (!stroke) return;
+    if (frame) { cancelAnimationFrame(frame); flushStroke(); }
     if (shapeEdit) {   // another pause while adjusting an ellipse: switch between rotate/scale and stretch/squash
       shapeEdit.base = shapeEdit.cur; shapeEdit.anchor = shapeEdit.lastQ;
       shapeEdit.mode = shapeEdit.mode === 'squash' ? 'free' : 'squash';
@@ -996,6 +1070,7 @@ button { font: inherit; color: inherit; }
   function endStroke() {
     if (!stroke) return;
     stopHold();
+    if (frame) { cancelAnimationFrame(frame); flushStroke(); }
     try { finishStroke(); }
     catch (err) { console.error(err); clearLayers(); redrawAll(); }
     stroke = null; strokePointer = null; shapeEdit = null;
@@ -1005,7 +1080,7 @@ button { font: inherit; color: inherit; }
     drawTail(ctx, stroke); ctx.globalCompositeOperation = 'source-over';
     commit(stroke); redoStack = []; updateHistoryBtns();
   }
-  function cancelStroke() { if (!stroke) return; stopHold(); shapeEdit = null; clearLayers(); stroke = null; strokePointer = null; redrawAll(); }
+  function cancelStroke() { if (!stroke) return; stopHold(); queued = []; shapeEdit = null; clearLayers(); stroke = null; strokePointer = null; redrawAll(); }
 
   function startPinch() {
     const [a, b] = [...touches.values()];
@@ -1070,8 +1145,8 @@ button { font: inherit; color: inherit; }
     }
     if (guideDrag) {
       if (pinch) { guideDrag = null; return; }
-      const c = Math.cos(st.rot), s = Math.sin(st.rot), dx = e.clientX - guideDrag.x, dy = e.clientY - guideDrag.y;
-      guide.x += (c * dx + s * dy) / st.scale; guide.y += (c * dy - s * dx) / st.scale;
+      const a = toSheet(guideDrag.x, guideDrag.y), b = toSheet(e.clientX, e.clientY);
+      guide.x += b.x - a.x; guide.y += b.y - a.y;
       guideDrag = { x: e.clientX, y: e.clientY }; drawGuide(); return;
     }
     if (pan) {
@@ -1089,13 +1164,32 @@ button { font: inherit; color: inherit; }
       if (touches.size === 0) pan = null;
     } else if (pan) { pan = null; vp.classList.remove('panning'); }
     if (stroke && e.pointerId === strokePointer) {
-      if (e.type === 'pointercancel') cancelStroke(); else endStroke();
+      // Safari cancels pencil input now and then (Scribble, palm, system gestures): keep what was drawn
+      if (e.type === 'pointercancel' && strokeIsTouch) cancelStroke(); else endStroke();
     }
   }
   vp.addEventListener('pointerup', pointerEnd);
   vp.addEventListener('pointercancel', pointerEnd);
   vp.addEventListener('lostpointercapture', e => { if (stroke && e.pointerId === strokePointer) endStroke(); });
   vp.addEventListener('contextmenu', e => e.preventDefault());
+  // without this, iPad Safari hands Apple Pencil strokes to Scribble / gestures and pointer events stall or get cancelled
+  for (const type of ['touchstart', 'touchmove', 'touchend']) vp.addEventListener(type, e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  // anywhere else, a pen or finger sliding must not drag, bounce or swipe the whole page;
+  // sliders and the scrolling save sheet keep their own movement
+  document.addEventListener('touchmove', e => {
+    if (e.cancelable && !e.target.closest('input[type=range], .sheet, button, label, a')) e.preventDefault();
+  }, { passive: false });
+  // iPad Safari often drops the click when Apple Pencil taps a button (the tip slides a little):
+  // a pen tap that produces no click within a moment presses the button itself
+  let penTap = null;
+  document.addEventListener('pointerup', e => {
+    if (e.pointerType !== 'pen') return;
+    const b = e.target.closest && e.target.closest('button, .swatch, input[type=checkbox]');
+    if (!b || b.disabled || b.id === 'loomisGrip') return;
+    penTap = b;
+    setTimeout(() => { if (penTap === b) { penTap = null; b.click(); } }, 120);
+  }, true);
+  document.addEventListener('click', e => { if (penTap && penTap.contains(e.target)) penTap = null; }, true);
 
   // ---------- tools ----------
   function setTool(t) {
@@ -1163,6 +1257,7 @@ button { font: inherit; color: inherit; }
     else if (k === 'q') toggleSnap();
     else if (k === 'l') toggleLoomis();
     else if (k === 'r') straighten();
+    else if (k === 'm') mirror();
   });
   window.addEventListener('keyup', e => {
     if (e.code === 'Space') { spaceDown = false; vp.classList.remove('pan', 'panning'); updateRing(); }
@@ -1180,9 +1275,10 @@ button { font: inherit; color: inherit; }
     if ($('#withRef').checked && !st.refHidden) {
       o.globalAlpha = st.opacity / 100; o.drawImage(refImg, 0, 0, st.w, st.h); o.globalAlpha = 1;
     }
-    if (guide && $('#withGuide').checked) o.drawImage(guideCv, 0, 0);
+    if (guide && $('#withGuide').checked) paintGuide(o);
     o.drawImage(cv, 0, 0);
     out.toBlob(blob => {
+      out.width = out.height = 0;
       if (saveUrl) URL.revokeObjectURL(saveUrl);
       saveBlob = blob;
       // tablets: the share sheet is the way to put the picture into Photos / Gallery
@@ -1224,34 +1320,35 @@ button { font: inherit; color: inherit; }
   const D = 0.68, RS = Math.sqrt(1 - D * D), U = RS;
   const LOOMIS = (() => {
     const curves = [];
-    const arc = (f, a0, a1, n, normal) => {
+    // face: the lines that build the face (brow, centre, nose, chin, cheeks, jaw) are drawn heavier
+    const arc = (f, a0, a1, n, normal, face) => {
       const pts = [];
       for (let i = 0; i <= n; i++) pts.push(f(a0 + (a1 - a0) * i / n));
-      curves.push({ pts, normal });
+      curves.push({ pts, normal, face });
     };
-    const poly = (pts, normal) => curves.push({ pts, normal });
+    const poly = (pts, normal, face) => curves.push({ pts, normal, face });
     for (const s of [1, -1]) {
       // side plane: circle, with the cross through its centre (ear sits at the centre)
       arc(t => [s * D, RS * Math.sin(t), RS * Math.cos(t)], 0, Math.PI * 2, 64, [s, 0, 0]);
       poly([[s * D, RS, 0], [s * D, -RS, 0]], [s, 0, 0]);
       poly([[s * D, 0, RS], [s * D, 0, -RS]], [s, 0, 0]);
       // side edge of the face plane: brow corner → cheek → chin corner
-      poly([[s * D * 0.97, 0, RS * 0.98], [s * 0.5, -U, 0.8], [s * 0.24, -2 * U, 0.82]], [s * 0.55, 0, 0.83]);
+      poly([[s * D * 0.97, 0, RS * 0.98], [s * 0.5, -U, 0.8], [s * 0.24, -2 * U, 0.82]], [s * 0.55, 0, 0.83], true);
       // jaw: chin corner → jaw angle → back under the ear
-      poly([[s * 0.24, -2 * U, 0.82], [s * 0.6, -1.3, 0.05], [s * D, -RS * 0.75, -0.25]], [s * 0.8, -0.5, 0.1]);
+      poly([[s * 0.24, -2 * U, 0.82], [s * 0.6, -1.3, 0.05], [s * D, -RS * 0.75, -0.25]], [s * 0.8, -0.5, 0.1], true);
     }
     const front = Math.asin(D);
     // brow line around the sphere between the side planes
-    arc(a => [Math.sin(a), 0, Math.cos(a)], -front, front, 24, null);
+    arc(a => [Math.sin(a), 0, Math.cos(a)], -front, front, 24, null, true);
     // hairline, one unit above the brow
     const rh = Math.sqrt(1 - U * U), hf = Math.asin(Math.min(1, D / rh));
     arc(a => [rh * Math.sin(a), U, rh * Math.cos(a)], -hf, hf, 24, null);
     // centre line over the top of the skull and down the back
     arc(b => [0, Math.sin(b), Math.cos(b)], 0, Math.PI * 1.5, 72, null);
     // centre line of the face, nose line and chin line
-    poly([[0, 0, 1], [0, -U, 0.97], [0, -2 * U, 0.86]], [0, 0, 1]);
-    poly([[-0.3, -U, 0.9], [0.3, -U, 0.9]], [0, 0, 1]);
-    poly([[-0.24, -2 * U, 0.82], [0.24, -2 * U, 0.82]], [0, -0.3, 0.95]);
+    poly([[0, 0, 1], [0, -U, 0.97], [0, -2 * U, 0.86]], [0, 0, 1], true);
+    poly([[-0.3, -U, 0.9], [0.3, -U, 0.9]], [0, 0, 1], true);
+    poly([[-0.24, -2 * U, 0.82], [0.24, -2 * U, 0.82]], [0, -0.3, 0.95], true);
     return curves;
   })();
   // where the features sit: eyes just under the brow line, nose tip on the nose line, chin at the bottom,
@@ -1284,14 +1381,16 @@ button { font: inherit; color: inherit; }
     g.save();
     g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = g.fillStyle = color; g.lineWidth = lw;
     g.globalAlpha = 0.95;
+    g.globalAlpha = 0.8;
     g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.stroke();   // the sphere's outline is always a circle
     for (const c of LOOMIS) {
       const P = c.pts.map(rot), N = c.normal && rot(c.normal);
       for (let i = 1; i < P.length; i++) {
         const z = N ? N[2] : (P[i - 1][2] + P[i][2]) / 2;
         const front = z > -0.02;
-        g.globalAlpha = front ? 0.95 : 0.2;
-        g.setLineDash(front ? [] : [lw * 2, lw * 3]);
+        g.globalAlpha = front ? (c.face ? 1 : 0.8) : 0.18;
+        g.lineWidth = front ? (c.face ? lw * 1.9 : lw * 0.85) : lw * 0.5;
+        g.setLineDash(front ? [] : [lw * 1.5, lw * 2.5]);
         g.beginPath();
         g.moveTo(cx + P[i - 1][0] * R, cy - P[i - 1][1] * R);
         g.lineTo(cx + P[i][0] * R, cy - P[i][1] * R);
@@ -1330,10 +1429,14 @@ button { font: inherit; color: inherit; }
       const off = m.outline ? R * 0.22 : R * 0.09;
       const tx = x + Math.sign(dx) * off, ty = y + dy * R * 0.04;
       const text = t(m.key);
-      g.textAlign = dx < 0 ? 'right' : 'left';
+      // on a mirrored page the words are flipped back so they still read normally
+      const mt = g.getTransform(), flipped = mt.a * mt.d - mt.b * mt.c < 0;
+      g.save(); g.translate(tx, ty); if (flipped) g.scale(-1, 1);
+      g.textAlign = (dx < 0) !== flipped ? 'right' : 'left';
       g.lineWidth = Math.max(3, font * 0.32); g.strokeStyle = g.canvas === lv ? getComputedStyle(lv).backgroundColor : 'rgba(255,255,255,.85)'; g.lineJoin = 'round';
-      g.strokeText(text, tx, ty);
-      g.fillText(text, tx, ty);
+      g.strokeText(text, 0, 0);
+      g.fillText(text, 0, 0);
+      g.restore();
       g.strokeStyle = color;
     }
   }
@@ -1348,10 +1451,22 @@ button { font: inherit; color: inherit; }
     lvctx.clearRect(0, 0, lv.width, lv.height);
     drawLoomis(lvctx, lv.width / 2, lv.height * 0.42, lv.width * 0.27, view, inkColor(), 3, showMarks() && 24);
   }
+  const paintGuide = g => drawLoomis(g, guide.x, guide.y, guide.r, view, '#7a4fd0', Math.max(1.5, guide.r / 70), showMarks() && Math.max(12, guide.r * 0.12));
+  let guideDpr = 1;
+  function sizeGuide() {
+    guideDpr = Math.min(2, window.devicePixelRatio || 1);
+    guideCv.width = Math.round(vp.clientWidth * guideDpr); guideCv.height = Math.round(vp.clientHeight * guideDpr);
+    drawGuide();
+  }
   function drawGuide() {
+    gctx.setTransform(1, 0, 0, 1, 0, 0);
     gctx.clearRect(0, 0, guideCv.width, guideCv.height);
-    if (!guide) return;
-    drawLoomis(gctx, guide.x, guide.y, guide.r, view, '#7a4fd0', Math.max(1.5, guide.r / 70), showMarks() && Math.max(12, guide.r * 0.12));
+    if (!guide) { if (typeof drawMini === 'function') drawMini(); return; }
+    const k = guideDpr * st.scale, c = Math.cos(st.rot), s = Math.sin(st.rot), f = st.flip;
+    gctx.setTransform(k * c * f, k * s * f, -k * s, k * c, guideDpr * st.tx, guideDpr * st.ty);
+    paintGuide(gctx);
+    gctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (typeof drawMini === 'function') drawMini();
   }
   function refresh() { drawPanel(); drawGuide(); }
   const showMarks = () => $('#loomisMarks').checked;
@@ -1364,7 +1479,7 @@ button { font: inherit; color: inherit; }
       ? t('hintPlaced') : t('hintUnplaced');
     if (guide) {
       const s = $('#loomisSize');
-      s.max = Math.round(Math.max(st.w, st.h) / 2.2); s.value = Math.round(guide.r);
+      s.max = Math.round(Math.max(st.w, st.h) * 0.9); s.value = Math.round(guide.r);
     }
   }
   function setGuideMove(on) {
@@ -1402,6 +1517,73 @@ button { font: inherit; color: inherit; }
   $('#loomisRemove').onclick = removeGuide;
   $('#loomisSize').oninput = e => { if (guide) { guide.r = +e.target.value; drawGuide(); } };
   $('#loomisRoll').oninput = e => { view.roll = -e.target.value * Math.PI / 180; refresh(); };
+  // ---------- minimap: the whole picture, with a box showing what the screen shows ----------
+  const mini = $('#mini'), miniCv = $('#miniCv'), mctx = miniCv.getContext('2d');
+  const thumb = document.createElement('canvas'), tctx = thumb.getContext('2d');
+  let miniK = 1, miniDpr = 1, viewQueued = 0, thumbTimer = 0;
+  function sizeMini() {
+    const side = innerWidth < 560 ? 104 : 150;
+    miniK = side / Math.max(st.w, st.h); miniDpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(1, Math.round(st.w * miniK)), h = Math.max(1, Math.round(st.h * miniK));
+    miniCv.style.width = thumb.style.width = w + 'px'; miniCv.style.height = h + 'px';
+    miniCv.width = thumb.width = Math.round(w * miniDpr); miniCv.height = thumb.height = Math.round(h * miniDpr);
+  }
+  function paintThumb() {
+    thumbTimer = 0;
+    if (!st.loaded) return;
+    if (stroke) { thumbLater(); return; }   // never in the middle of a line
+    tctx.imageSmoothingQuality = 'high';
+    tctx.globalAlpha = 1; tctx.fillStyle = '#ffffff'; tctx.fillRect(0, 0, thumb.width, thumb.height);
+    tctx.globalAlpha = 0.5; tctx.drawImage(refImg, 0, 0, thumb.width, thumb.height);
+    tctx.globalAlpha = 1; tctx.drawImage(cv, 0, 0, thumb.width, thumb.height);
+    drawMini();
+  }
+  function thumbLater() { clearTimeout(thumbTimer); thumbTimer = setTimeout(paintThumb, 500); }
+  function drawMini() {
+    if (!st.loaded || mini.classList.contains('closed')) return;
+    const k = miniK * miniDpr;
+    mctx.setTransform(1, 0, 0, 1, 0, 0);
+    mctx.drawImage(thumb, 0, 0);
+    if (guide) {
+      mctx.strokeStyle = '#7a4fd0'; mctx.lineWidth = 1.5 * miniDpr;
+      mctx.beginPath(); mctx.arc(guide.x * k, guide.y * k, guide.r * k, 0, Math.PI * 2); mctx.stroke();
+    }
+    // the screen's four corners, mapped back onto the picture
+    const r = vp.getBoundingClientRect();
+    const q = [[0, 0], [r.width, 0], [r.width, r.height], [0, r.height]].map(([x, y]) => toSheet(x, y));
+    mctx.beginPath();
+    q.forEach((p, i) => mctx[i ? 'lineTo' : 'moveTo'](p.x * k, p.y * k));
+    mctx.closePath();
+    mctx.fillStyle = 'rgba(207, 43, 31, .12)'; mctx.fill();
+    mctx.strokeStyle = '#cf2b1f'; mctx.lineWidth = 2 * miniDpr; mctx.stroke();
+  }
+  // one redraw per frame however many view changes arrive
+  function viewChanged() {
+    if (viewQueued) return;
+    viewQueued = requestAnimationFrame(() => { viewQueued = 0; drawGuide(); });
+  }
+  let miniDrag = null;
+  function miniJump(e) {
+    const b = miniCv.getBoundingClientRect(), r = vp.getBoundingClientRect();
+    const sp = { x: (e.clientX - b.left) / miniK, y: (e.clientY - b.top) / miniK };
+    pinTo(sp, r.width / 2, r.height / 2); applyView();
+  }
+  miniCv.addEventListener('pointerdown', e => {
+    e.preventDefault(); miniDrag = e.pointerId;
+    try { miniCv.setPointerCapture(e.pointerId); } catch {}
+    miniJump(e);
+  });
+  miniCv.addEventListener('pointermove', e => { if (miniDrag === e.pointerId) miniJump(e); });
+  for (const ev of ['pointerup', 'pointercancel']) miniCv.addEventListener(ev, e => { if (miniDrag === e.pointerId) miniDrag = null; });
+  $('#miniFit').onclick = fit;
+  function setMiniOpen(open) {
+    mini.classList.toggle('closed', !open);
+    try { localStorage.setItem('miniClosed', open ? '' : '1'); } catch {}
+    if (open) drawMini();
+  }
+  $('#miniToggle').onclick = () => setMiniOpen(mini.classList.contains('closed'));
+  try { if (localStorage.getItem('miniClosed')) mini.classList.add('closed'); } catch {}
+
   document.querySelectorAll('#loomis .presets .btn').forEach(b => b.onclick = () => {
     view.yaw = +b.dataset.yaw; view.pitch = +b.dataset.pitch; refresh();
   });
